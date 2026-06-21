@@ -4,7 +4,7 @@
 **OS:** Linux (Ubuntu 24.04)  
 **Difficulty:** Easy  
 **CVE:** CVE-2023-23752  
-**Author:** [Your HTB Username]  
+**Author:** Anonymous0Traveller  
 
 ---
 
