@@ -16,6 +16,7 @@ escalation via sudo misconfiguration.
 | root     | -         | Via privesc   |
 
 ### Key Processes
+![Nmap Scan](./Screenshot_2026-06-26_13-48-14.png)
 
 **Apache2** runs as `www-data` on port 80, serving a 
 custom PHP photo blog. The upload functionality at 
